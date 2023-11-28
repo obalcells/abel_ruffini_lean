@@ -1,0 +1,13 @@
+/build
+/lake-packages/*
+/lakefile.olean
+.lake
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+*.synctex.gz
+*.DS_Store
