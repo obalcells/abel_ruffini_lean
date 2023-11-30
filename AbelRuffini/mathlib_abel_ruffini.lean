@@ -65,7 +65,7 @@ theorem gal_mul_isSolvable {p q : F[X]} (_ : IsSolvable p.Gal) (_ : IsSolvable q
 
 theorem gal_prod_isSolvable {s : Multiset F[X]} (hs : ∀ p ∈ s, IsSolvable (Gal p)) :
     IsSolvable s.prod.Gal := by
-
+  
   apply Multiset.induction_on' s
   · exact gal_one_isSolvable
   · intro p t hps _ ht
