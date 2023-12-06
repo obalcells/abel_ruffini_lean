@@ -94,9 +94,8 @@ theorem is_monic_Phi
 
 theorem is_irreducible_Phi
   : Irreducible (Φ ℚ) := by
-
-  unfold
-
+  sorry
+  --unfold
 
 
 
@@ -120,6 +119,22 @@ theorem is_irreducible_Phi
 --     exact mt Int.coe_nat_dvd.mp hp2b
 --   all_goals exact Monic.isPrimitive (monic_Phi a b)
 -- #align abel_ruffini.irreducible_Phi AbelRuffini.irreducible_Phi
+
+
+theorem real_roots_Phi_le : Fintype.card ((Φ ℚ).rootSet ℝ) ≤ 3 := by
+   rw [← map_Phi (algebraMap ℤ ℚ)]
+   rw [Φ]
+   refine' (card_rootSet_le_derivative _).trans
+     (Nat.succ_le_succ ((card_rootSet_le_derivative _).trans (Nat.succ_le_succ _)))
+   suffices : (Polynomial.rootSet (C (20 : ℚ) * X ^ 3) ℝ).Subsingleton
+   · norm_num [Fintype.card_le_one_iff_subsingleton]
+     norm_num [← mul_assoc]
+     exact this
+   rw [rootSet_C_mul_X_pow]
+   norm_num
+   norm_num
+   norm_num
+
 
 -- theorem real_roots_Phi_le : Fintype.card ((Φ ℚ a b).rootSet ℝ) ≤ 3 := by
 --   rw [← map_Phi a b (algebraMap ℤ ℚ), Φ, ← one_mul (X ^ 5), ← C_1]
