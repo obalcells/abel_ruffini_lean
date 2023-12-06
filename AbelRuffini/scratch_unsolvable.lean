@@ -65,37 +65,40 @@ theorem coeff_five_Phi
   rw [coeff_X_pow]
   simp
 
-theorem Phi_has_degree_5
+theorem degree_Phi_eq_5
   [Nontrivial R]
   : (Φ R).degree = (5 : ℕ) := by
   rw [Φ]
   compute_degree
   simp
-  sorry
 
-theorem Phi_nat_degree_5
+theorem nat_degree_Phi_eq_5
   [Nontrivial R]
   : natDegree (Φ R) = 5 := by
-  apply degree_eq_iff_natDegree_eq Phi_has_degree_5
+  apply natDegree_eq_of_degree_eq_some degree_Phi_eq_5
 
 
 variable [Nontrivial R]
 
-theorem leading_coeff_Phi
+theorem leading_coeff_Phi_eq_one
   : (Φ R).leadingCoeff = 1 := by
   rw [Polynomial.leadingCoeff]
+  rw [nat_degree_Phi_eq_5]
+  apply coeff_five_Phi
 
-  rw [Phi_has_degree_5]
+theorem is_monic_Phi
+  : (Φ R).Monic := by
+  unfold Monic
+  rw [Polynomial.leadingCoeff]
+  apply leading_coeff_Phi_eq_one
+
+theorem is_irreducible_Phi
+  : Irreducible (Φ ℚ) := by
+
+  unfold
 
 
 
--- theorem leadingCoeff_Phi : (Φ R a b).leadingCoeff = 1 := by
---   rw [Polynomial.leadingCoeff, natDegree_Phi, coeff_five_Phi]
--- #align abel_ruffini.leading_coeff_Phi AbelRuffini.leadingCoeff_Phi
-
--- theorem monic_Phi : (Φ R a b).Monic :=
---   leadingCoeff_Phi a b
--- #align abel_ruffini.monic_Phi AbelRuffini.monic_Phi
 
 -- theorem irreducible_Phi (p : ℕ) (hp : p.Prime) (hpa : p ∣ a) (hpb : p ∣ b) (hp2b : ¬p ^ 2 ∣ b) :
 --     Irreducible (Φ ℚ a b) := by
