@@ -1,193 +1,195 @@
-/-
-Copyright (c) 2021 Thomas Browning. All rights reserved.
-Released under Apache 2.0 license as described in the file LICENSE.
-Authors: Thomas Browning
--/
 import Mathlib.Analysis.Calculus.LocalExtr.Polynomial
 import Mathlib.FieldTheory.AbelRuffini
 import Mathlib.RingTheory.RootsOfUnity.Minpoly
 import Mathlib.RingTheory.EisensteinCriterion
+import Mathlib.Algebra.MonoidAlgebra.Basic
+import Mathlib.Algebra.Associated
+import Mathlib.GroupTheory.Solvable
+import Mathlib.FieldTheory.PolynomialGaloisGroup
 
-#align_import wiedijk_100_theorems.abel_ruffini from "leanprover-community/mathlib"@"5563b1b49e86e135e8c7b556da5ad2f5ff881cad"
-
-/-!
-# Construction of an algebraic number that is not solvable by radicals.
-
-The main ingredients are:
- * `solvableByRad.isSolvable'` in `Mathlib/FieldTheory/AbelRuffini.lean` :
-  an irreducible polynomial with an `IsSolvableByRad` root has solvable Galois group
- * `galActionHom_bijective_of_prime_degree'` in `Mathlib/FieldTheory/PolynomialGaloisGroup.lean` :
-  an irreducible polynomial of prime degree with 1-3 non-real roots has full Galois group
- * `Equiv.Perm.not_solvable` in `Mathlib/GroupTheory/Solvable.lean` : the symmetric group is not
-  solvable
-
-Then all that remains is the construction of a specific polynomial satisfying the conditions of
-`galActionHom_bijective_of_prime_degree'`, which is done in this file.
-
--/
-
-
-namespace AbelRuffini
-
-set_option linter.uppercaseLean3 false
+-- set_option profiler true
+-- set_option synthInstance.maxHeartbeats 140000 -- default is 20000; five times that not enough here
+-- set_option trace.Meta.synthInstance true
 
 open Function Polynomial Polynomial.Gal Ideal
-
 open scoped Polynomial
+open AddMonoidAlgebra Subgroup
 
 attribute [local instance] splits_ℚ_ℂ
 
-variable (R : Type*) [CommRing R] (a b : ℕ)
+variable (R : Type*) [CommRing R] [Nontrivial R] (a b : ℕ)
 
-/-- A quintic polynomial that we will show is irreducible -/
-noncomputable def Φ : R[X] :=
-  X ^ 5 - C (a : R) * X + C (b : R)
-#align abel_ruffini.Φ AbelRuffini.Φ
+noncomputable def Φ : R[X] := X ^ 5 - C (4 : R) * X + C (2 : R)
 
 variable {R}
+variable (n : ℕ+)
 
-@[simp]
-theorem map_Phi {S : Type*} [CommRing S] (f : R →+* S) : (Φ R a b).map f = Φ S a b := by simp [Φ]
-#align abel_ruffini.map_Phi AbelRuffini.map_Phi
+theorem map_Phi
+  {S : Type*}
+  [CommRing S]
+  (f : R →+* S)
+  : (Φ R).map f = Φ S := by
+  simp [Φ]
 
-@[simp]
-theorem coeff_zero_Phi : (Φ R a b).coeff 0 = (b : R) := by simp [Φ, coeff_X_pow]
-#align abel_ruffini.coeff_zero_Phi AbelRuffini.coeff_zero_Phi
+theorem coeff_zero_Phi
+  : (Φ R).coeff 0 = 2 := by
+  rw [Φ]
+  simp
 
-@[simp]
-theorem coeff_five_Phi : (Φ R a b).coeff 5 = 1 := by
-  simp [Φ, coeff_X, coeff_C, -map_natCast]
-#align abel_ruffini.coeff_five_Phi AbelRuffini.coeff_five_Phi
+theorem coeff_five_Phi
+  : (Φ R).coeff 5 = 1 := by
+  rw [Φ]
+  simp
+  rw [← pow_one X]
+  rw [coeff_X_pow]
+  simp
 
-variable [Nontrivial R]
 
-theorem degree_Phi : (Φ R a b).degree = ((5 : ℕ) : WithBot ℕ) := by
-  suffices degree (X ^ 5 - C (a : R) * X) = ((5 : ℕ) : WithBot ℕ) by
+theorem degree_Phi_eq_5
+  : (Φ R).degree = ((5 : ℕ) : WithBot ℕ) := by
+  suffices degree (X ^ 5 - C (4 : R) * X) = ((5 : ℕ) : WithBot ℕ) by
     rwa [Φ, degree_add_eq_left_of_degree_lt]
-    convert (degree_C_le (R := R)).trans_lt (WithBot.coe_lt_coe.mpr (show 0 < 5 by norm_num))
-  rw [degree_sub_eq_left_of_degree_lt] <;> rw [degree_X_pow]
-  exact (degree_C_mul_X_le (a : R)).trans_lt (WithBot.coe_lt_coe.mpr (show 1 < 5 by norm_num))
-#align abel_ruffini.degree_Phi AbelRuffini.degree_Phi
-
-theorem natDegree_Phi : (Φ R a b).natDegree = 5 :=
-  natDegree_eq_of_degree_eq_some (degree_Phi a b)
-#align abel_ruffini.nat_degree_Phi AbelRuffini.natDegree_Phi
-
-theorem leadingCoeff_Phi : (Φ R a b).leadingCoeff = 1 := by
-  rw [Polynomial.leadingCoeff, natDegree_Phi, coeff_five_Phi]
-#align abel_ruffini.leading_coeff_Phi AbelRuffini.leadingCoeff_Phi
-
-theorem monic_Phi : (Φ R a b).Monic :=
-  leadingCoeff_Phi a b
-#align abel_ruffini.monic_Phi AbelRuffini.monic_Phi
-
-theorem irreducible_Phi (p : ℕ) (hp : p.Prime) (hpa : p ∣ a) (hpb : p ∣ b) (hp2b : ¬p ^ 2 ∣ b) :
-    Irreducible (Φ ℚ a b) := by
-  rw [← map_Phi a b (Int.castRingHom ℚ), ← IsPrimitive.Int.irreducible_iff_irreducible_map_cast]
-  apply irreducible_of_eisenstein_criterion
-  · rwa [span_singleton_prime (Int.coe_nat_ne_zero.mpr hp.ne_zero), Int.prime_iff_natAbs_prime]
-  · rw [leadingCoeff_Phi, mem_span_singleton]
-    exact mod_cast mt Nat.dvd_one.mp hp.ne_one
-  · intro n hn
-    rw [mem_span_singleton]
-    rw [degree_Phi] at hn; norm_cast at hn
-    interval_cases hn : n <;>
-    simp (config := {decide := true}) only [Φ, coeff_X_pow, coeff_C, Int.coe_nat_dvd.mpr, hpb,
-      if_true, coeff_C_mul, if_false, coeff_X_zero, hpa, coeff_add, zero_add, mul_zero, coeff_sub,
-      add_zero, zero_sub, dvd_neg, neg_zero, dvd_mul_of_dvd_left]
-  · simp only [degree_Phi, ← WithBot.coe_zero, WithBot.coe_lt_coe, Nat.succ_pos']
-    decide
-  · rw [coeff_zero_Phi, span_singleton_pow, mem_span_singleton]
-    exact mt Int.coe_nat_dvd.mp hp2b
-  all_goals exact Monic.isPrimitive (monic_Phi a b)
-#align abel_ruffini.irreducible_Phi AbelRuffini.irreducible_Phi
-
-theorem real_roots_Phi_le : Fintype.card ((Φ ℚ a b).rootSet ℝ) ≤ 3 := by
-  rw [← map_Phi a b (algebraMap ℤ ℚ), Φ, ← one_mul (X ^ 5), ← C_1]
-  refine' (card_rootSet_le_derivative _).trans
-    (Nat.succ_le_succ ((card_rootSet_le_derivative _).trans (Nat.succ_le_succ _)))
-  suffices : (Polynomial.rootSet (C (20 : ℚ) * X ^ 3) ℝ).Subsingleton
-  · norm_num [Fintype.card_le_one_iff_subsingleton, ← mul_assoc] at *
-    exact this
-  rw [rootSet_C_mul_X_pow] <;>
+    convert (degree_C_le).trans_lt (WithBot.coe_lt_coe.mpr (show 0 < 5 by norm_num))
+  rw [degree_sub_eq_left_of_degree_lt]
+  rw [degree_X_pow]
+  apply (degree_C_mul_X_le 4).trans_lt
+  rw [degree_X_pow]
   norm_num
-#align abel_ruffini.real_roots_Phi_le AbelRuffini.real_roots_Phi_le
 
-theorem real_roots_Phi_ge_aux (hab : b < a) :
-    ∃ x y : ℝ, x ≠ y ∧ aeval x (Φ ℚ a b) = 0 ∧ aeval y (Φ ℚ a b) = 0 := by
-  let f : ℝ → ℝ := fun x : ℝ => aeval x (Φ ℚ a b)
-  have hf : f = fun x : ℝ => x ^ 5 - a * x + b := by simp [Φ]
-  have hc : ∀ s : Set ℝ, ContinuousOn f s := fun s => (Φ ℚ a b).continuousOn_aeval
-  have ha : (1 : ℝ) ≤ a := Nat.one_le_cast.mpr (Nat.one_le_of_lt hab)
-  have hle : (0 : ℝ) ≤ 1 := zero_le_one
-  have hf0 : 0 ≤ f 0 := by simp [hf]
-  by_cases hb : (1 : ℝ) - a + b < 0
-  · have hf1 : f 1 < 0 := by simp [hf, hb]
-    have hfa : 0 ≤ f a := by
-      -- Porting note: was `simp_rw`
-      simp only [hf, ← sq]
-      refine' add_nonneg (sub_nonneg.mpr (pow_le_pow ha _)) _ <;> norm_num
-    obtain ⟨x, ⟨-, hx1⟩, hx2⟩ := intermediate_value_Ico' hle (hc _) (Set.mem_Ioc.mpr ⟨hf1, hf0⟩)
-    obtain ⟨y, ⟨hy1, -⟩, hy2⟩ := intermediate_value_Ioc ha (hc _) (Set.mem_Ioc.mpr ⟨hf1, hfa⟩)
-    exact ⟨x, y, (hx1.trans hy1).ne, hx2, hy2⟩
-  · replace hb : (b : ℝ) = a - 1 := by linarith [show (b : ℝ) + 1 ≤ a from mod_cast hab]
-    have hf1 : f 1 = 0 := by simp [hf, hb]
-    have hfa :=
-      calc
-        f (-a) = (a : ℝ) ^ 2 - (a : ℝ) ^ 5 + b := by
-          norm_num [hf, ← sq, sub_eq_add_neg, add_comm, Odd.neg_pow (by decide : Odd 5)]
-        _ ≤ (a : ℝ) ^ 2 - (a : ℝ) ^ 3 + (a - 1) := by
-          refine' add_le_add (sub_le_sub_left (pow_le_pow ha _) _) _ <;> linarith
-        _ = -((a : ℝ) - 1) ^ 2 * (a + 1) := by ring
-        _ ≤ 0 := by nlinarith
-    have ha' := neg_nonpos.mpr (hle.trans ha)
-    obtain ⟨x, ⟨-, hx1⟩, hx2⟩ := intermediate_value_Icc ha' (hc _) (Set.mem_Icc.mpr ⟨hfa, hf0⟩)
-    exact ⟨x, 1, (hx1.trans_lt zero_lt_one).ne, hx2, hf1⟩
-#align abel_ruffini.real_roots_Phi_ge_aux AbelRuffini.real_roots_Phi_ge_aux
+theorem nat_degree_Phi_eq_5
+  [Nontrivial R]
+  : natDegree (Φ R) = 5 := by
+  apply natDegree_eq_of_degree_eq_some degree_Phi_eq_5
 
-theorem real_roots_Phi_ge (hab : b < a) : 2 ≤ Fintype.card ((Φ ℚ a b).rootSet ℝ) := by
-  have q_ne_zero : Φ ℚ a b ≠ 0 := (monic_Phi a b).ne_zero
-  obtain ⟨x, y, hxy, hx, hy⟩ := real_roots_Phi_ge_aux a b hab
-  have key : ↑({x, y} : Finset ℝ) ⊆ (Φ ℚ a b).rootSet ℝ := by
-    simp [Set.insert_subset, mem_rootSet_of_ne q_ne_zero, hx, hy]
-  convert Fintype.card_le_of_embedding (Set.embeddingOfSubset _ _ key)
-  simp only [Finset.coe_sort_coe, Fintype.card_coe, Finset.card_singleton,
-    Finset.card_insert_of_not_mem (mt Finset.mem_singleton.mp hxy)]
-#align abel_ruffini.real_roots_Phi_ge AbelRuffini.real_roots_Phi_ge
 
-theorem complex_roots_Phi (h : (Φ ℚ a b).Separable) : Fintype.card ((Φ ℚ a b).rootSet ℂ) = 5 :=
-  (card_rootSet_eq_natDegree h (IsAlgClosed.splits_codomain _)).trans (natDegree_Phi a b)
-#align abel_ruffini.complex_roots_Phi AbelRuffini.complex_roots_Phi
+theorem leading_coeff_Phi_eq_one
+  : (Φ R).leadingCoeff = 1 := by
+  rw [Polynomial.leadingCoeff]
+  rw [nat_degree_Phi_eq_5]
+  apply coeff_five_Phi
 
-theorem gal_Phi (hab : b < a) (h_irred : Irreducible (Φ ℚ a b)) :
-    Bijective (galActionHom (Φ ℚ a b) ℂ) := by
+theorem is_monic_Phi
+  : (Φ R).Monic := by
+  unfold Monic
+  rw [Polynomial.leadingCoeff]
+  apply leading_coeff_Phi_eq_one
+
+theorem is_primitive_Phi
+  : IsPrimitive (Φ ℤ) := by
+  /- We just need to use the fact that it's monic to prove that it's primitive -/
+  apply Monic.isPrimitive is_monic_Phi
+
+
+theorem is_irreducible_Phi
+  (p : ℕ)
+  (hp : p.Prime)
+  (hp_div_2 : p ∣ 2)
+  (hp_div_4 : p ∣ 4)
+  (hp_ne_div_sq : ¬p ^ 2 ∣ 2)
+  : Irreducible (Φ ℚ) := by
+
+  /- We first want to use Gauss' Lemma but for that we have to rewrite (Φ ℚ) as a polynomial in ℤ -/
+  /- (Int.castRingHom ℚ) is a (homomorphism) map from ℤ → ℚ -/
+  /- With this rw we're moving the polynomial to ℤ -/
+  /- The polynomial we get is equivalent because the map we move it with is a ring homomorphism -/
+  rw [← map_Phi (Int.castRingHom ℚ)]
+
+  /- At this step we're using Gauss' Lemma -/
+  /- A new subgoal will be created because we have to show it's a primitive polynomial too -/
+  /- We'll solve that goal later, now we'll just prove that the polynomial (in ℤ) is irreducible -/
+  rw [← IsPrimitive.Int.irreducible_iff_irreducible_map_cast]
+
+  /- Now it's time to apply Eisenstein's Lemma to show irreducibility -/
+  apply irreducible_of_eisenstein_criterion
+  · /- The eisenstein theorem expects us to provide a proof for a prime ideal -/
+    /- We want to use the ideal generated by the prime p, so it will be P = pℤ  -/
+    /- We'll convert the goal from showing isPrime ?P to Prime p -/
+    /- This is equivalent because the ideal generated by p is prime if and only if p is prime -/
+    rw [span_singleton_prime (Int.coe_nat_ne_zero.mpr hp.ne_zero)]
+
+    /- We want the prime to be casted back to ℕ (it's currently in ℤ) -/
+    rw [Int.prime_iff_natAbs_prime]
+    exact hp
+
+  · /- We want to show that the leading coefficient of Φ ℤ is not spanned by the prime p -/
+    /- We'll use the fact that the leading coefficient is 1, so it can't be divisible by the prime p -/
+    rw [leading_coeff_Phi_eq_one]
+    /- The following lemma says that x ∈ span { p } is equivalent to p | x -/
+    rw [mem_span_singleton]
+    /- We now want to show that p doesn't divide 1 -/
+    /- Nat.dvd_one says that n ∣ 1 ↔ n = 1 -/
+    /- We want to use the fact that p ≠ 1 to show that ¬(p | 1) -/
+    /- mt inverts the equivalence such that for a ↔ b and ¬a implies ¬b -/
+    exact mod_cast mt Nat.dvd_one.mp hp.ne_one
+
+  · /- Now we have to prove that the coefficients aren't divisible by p -/
+    intro n
+    rw [degree_Phi_eq_5]
+    intro hn
+    sorry /- ): -/
+  · rw [degree_Phi_eq_5]
+    /- Now we just need to prove 0 < 5. We'll use apply? -/
+    exact sign_eq_one_iff.mp rfl
+
+  · rw [coeff_zero_Phi]
+    /- TODO -/
+    sorry
+
+  · exact is_primitive_Phi
+
+  /- Now we just have to prove that Φ is primitive -/
+  exact is_primitive_Phi
+
+
+theorem real_roots_Phi_ge : 2 ≤ Fintype.card ((Φ ℚ).rootSet ℝ) := by
+  sorry /- see wolfram alpha (: -/
+
+theorem real_roots_Phi_le : Fintype.card ((Φ ℚ).rootSet ℝ) ≤ 3 := by
+  sorry
+
+theorem complex_roots_Phi (h : (Φ ℚ).Separable) : Fintype.card ((Φ ℚ).rootSet ℂ) = 5 :=
+  (card_rootSet_eq_natDegree h (IsAlgClosed.splits_codomain _)).trans (nat_degree_Phi_eq_5)
+
+instance fact_prime_five : Nat.Prime 5 := sorry
+
+theorem galois_group_Phi (h_irred : Irreducible (Φ ℚ)) :
+    Bijective (galActionHom (Φ ℚ) ℂ) := by
+  /- An irreducible polynomial of prime degree with 1-3 non-real roots has full Galois group. -/
   apply galActionHom_bijective_of_prime_degree' h_irred
-  · simp only [natDegree_Phi]; decide
-  · rw [complex_roots_Phi a b h_irred.separable, Nat.succ_le_succ_iff]
-    exact (real_roots_Phi_le a b).trans (Nat.le_succ 3)
-  · simp_rw [complex_roots_Phi a b h_irred.separable, Nat.succ_le_succ_iff]
-    exact real_roots_Phi_ge a b hab
-#align abel_ruffini.gal_Phi AbelRuffini.gal_Phi
+  · /- First we have to prove that the polynomial has prime degree-/
+    rw [nat_degree_Phi_eq_5]
+    exact fact_prime_five
+  · /- Now we want to show that cardinality (rootSet (Φ ℚ) ℝ) + 1 ≤ cardinality (rootSet (Φ ℚ) ℂ) -/
+    /- We can use the previous bounds we found -/
+    /- Also, we fix the +1 inequality using succ -/
+    rw [complex_roots_Phi h_irred.separable, Nat.succ_le_succ_iff]
+    /- Now we just replace the bound on the real roots now -/
+    exact real_roots_Phi_le.trans (Nat.le_succ 3)
+  · /- Now we prove the bound -/
+    /- Fintype.card ↑(rootSet (Φ ℚ) ℂ) ≤ Fintype.card ↑(rootSet (Φ ℚ) ℝ) + 3 -/
+    simp_rw [complex_roots_Phi h_irred.separable, Nat.succ_le_succ_iff]
+    exact real_roots_Phi_ge
 
-theorem not_solvable_by_rad (p : ℕ) (x : ℂ) (hx : aeval x (Φ ℚ a b) = 0) (hab : b < a)
-    (hp : p.Prime) (hpa : p ∣ a) (hpb : p ∣ b) (hp2b : ¬p ^ 2 ∣ b) : ¬IsSolvableByRad ℚ x := by
-  have h_irred := irreducible_Phi a b p hp hpa hpb hp2b
+theorem not_solvable_by_rad
+  (p : ℕ)
+  (x : ℂ)
+  (hx : aeval x (Φ ℚ) = 0)
+  (hp : p.Prime)
+  (hp_div_2 : p ∣ 2)
+  (hp_div_4 : p ∣ 4)
+  (hp_ne_div_sq : ¬p ^ 2 ∣ 2)
+  : ¬IsSolvableByRad ℚ x := by
+  /- first we check that it's irreducible -/
+  have h_irred := is_irreducible_Phi p hp hp_div_2 hp_div_4 hp_ne_div_sq
+
+  /- We apply Abel Ruffini's theorem to -/
+  /- go from ¬SolvableByRad to ¬GaloisGroupIsSolvable -/
   apply mt (solvableByRad.isSolvable' h_irred hx)
+
+  /- We introduce this so that the goal becomes to prove False -/
   intro h
-  refine' Equiv.Perm.not_solvable _ (le_of_eq _)
-    (solvable_of_surjective (gal_Phi a b hab h_irred).2)
-  rw_mod_cast [Cardinal.mk_fintype, complex_roots_Phi a b h_irred.separable]
-#align abel_ruffini.not_solvable_by_rad AbelRuffini.not_solvable_by_rad
 
-theorem not_solvable_by_rad' (x : ℂ) (hx : aeval x (Φ ℚ 4 2) = 0) : ¬IsSolvableByRad ℚ x := by
-  apply not_solvable_by_rad 4 2 2 x hx <;> decide
-#align abel_ruffini.not_solvable_by_rad' AbelRuffini.not_solvable_by_rad'
+  /- We use the proof that Sₙ isn't solvable for n ≥ 5 -/
+  refine' Equiv.Perm.not_solvable _ (le_of_eq _) (solvable_of_surjective (galois_group_Phi h_irred).2)
 
-/-- **Abel-Ruffini Theorem** -/
-theorem exists_not_solvable_by_rad : ∃ x : ℂ, IsAlgebraic ℚ x ∧ ¬IsSolvableByRad ℚ x := by
-  obtain ⟨x, hx⟩ := exists_root_of_splits (algebraMap ℚ ℂ) (IsAlgClosed.splits_codomain (Φ ℚ 4 2))
-    (ne_of_eq_of_ne (degree_Phi 4 2) (mt WithBot.coe_eq_coe.mp (show 5 ≠ 0 by norm_num)))
-  exact ⟨x, ⟨Φ ℚ 4 2, (monic_Phi 4 2).ne_zero, hx⟩, not_solvable_by_rad' x hx⟩
-#align abel_ruffini.exists_not_solvable_by_rad AbelRuffini.exists_not_solvable_by_rad
-
-end AbelRuffini
+  rw_mod_cast [Cardinal.mk_fintype, complex_roots_Phi h_irred.separable]
